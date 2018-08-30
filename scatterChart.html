@@ -1,0 +1,329 @@
+<html ng-app="AngularLeaflet">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+    <title>COMP90024-TEAM8</title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- css -->
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+		div.tooltip {	
+				position: absolute;			
+				text-align: center;			
+				width: 60px;					
+				height: 40px;					
+				padding: 5px;				
+				font: 12px sans-serif;		
+				background: lightsteelblue;	
+				border: 0px;		
+				border-radius: 8px;			
+				pointer-events: none;			
+			}
+			
+		  rect.bordered {
+				stroke: #E6E6E6;
+				stroke-width:2px;   
+			  }
+
+			  text.mono {
+				font-size: 9pt;
+				font-family: Consolas, courier;
+				fill: #aaa;
+			  }
+
+			  text.axis-workweek {
+				fill: #000;
+			  }
+
+			  text.axis-worktime {
+				fill: #000;
+			}
+			
+			circle {
+			  fill: #004d99;
+			}
+
+			.error-line {
+			  stroke: red;
+			  stroke-dasharray: 2,2;
+			}
+
+			.error-cap {
+			  stroke: red;
+			  stroke-width: 2px;
+			  stroke-type: solid;
+			}
+
+			.tooltip2 {
+			  position: absolute;
+			  height: auto;
+			  width: auto;
+			  padding: 15px;
+			  background:  #004d99;
+			  color: white;
+			  border-radius: 8px;	
+			  font: 12px sans-serif;
+			  }
+
+			.tooltip2:after {
+				content: " ";
+				position: absolute;
+				top: 50%;
+				right: 100%; /* To the left of the tooltip */
+				margin-top: -10px;
+				border-width: 10px;
+				border-style: solid;
+				border-color: transparent  #004d99 transparent transparent;
+			}
+
+			 .plot-bg {
+			   fill: #f5f5f5;
+			 }
+			 
+			path { 
+			  stroke: steelblue;
+			  stroke-width: 2;
+			  fill: none;
+			}
+			 
+			.axis path,
+			.axis line {
+				fill: none;
+				stroke: grey;
+				stroke-width: 1;
+				shape-rendering: crispEdges;
+			}
+			
+			.tick line {
+				stroke: lightgray;
+				opacity: 0.5;
+			}
+			.grid path {
+				  stroke-width: 0;
+			}
+
+    </style>
+
+</head>
+<body>
+<div class="nav">
+    <div class="nav-header">
+        <div class="nav-title">
+            COMP90024 Team8
+        </div>
+    </div>
+    <div class="nav-btn">
+        <label for="nav-check">
+            <span></span>
+            <span></span>
+            <span></span>
+        </label>
+    </div>
+    <input type="checkbox" id="nav-check">
+    <div class="nav-links">
+        <a href="index.html" target="_blank">Cloropleth</a>
+        <a href="heatmap.html" target="_blank">Heatmap</a>
+        <a href="scatterChart.html" target="_blank">Scatter Chart</a>
+    </div>
+</div>
+
+<scatter-chart></scatter-chart>
+
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.6/angular.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.6/angular-resource.js"></script>
+<script src="http://d3js.org/d3.v3.js"></script>
+
+<script type="text/javascript">
+	angular.module('AngularLeaflet',['ngResource'])
+		.directive("scatterChart",['$resource','$http', function($resource, $http){
+			var margin = { top: 50, right: 50, bottom: 100, left: 160 },
+			  width = 1200 - margin.left - margin.right,
+			  height = 450- margin.top - margin.bottom;
+				
+			return {
+				//directive only can be invoked by using <> 
+				restrict: 'E',
+				template: '<div id="scatter"></div><div id="lga"></div>',
+				link: function(scope,element,attrs){
+						$resource("https://couchv.team8.xyz/melb_tweets/_design/designDoc/_view/sports?group=true").get()
+							.$promise.then(
+								function(response){
+									console.log(response);
+									d3.tsv("https://static.team8.xyz/csv/sport_and_recreation.csv",function(error, data){
+										if (error) throw error;
+										var facility = data[0];
+										var scatterData = [];
+										
+										response.rows.forEach(function(suburb){
+											var postcode = parseInt(suburb.key);
+											var percentage = suburb.value.sum/suburb.value.count * 100;
+											if (typeof facility[postcode] != 'undefined' && facility[postcode]<=60){
+												var temp = {
+													percentage: suburb.value.sum/suburb.value.count * 100,
+													postcode: postcode,
+													ref: 'suburb',
+													numFacility: facility[postcode]
+												} 
+												scatterData.push(temp);
+											}
+										});
+										
+										scatterData.sort(function(a,b){
+											return a.percentage - b.percentage;
+										});
+										
+										var numToIgnore = (scatterData.length-scatterData.length*0.8)/2;
+										var totalRemaining = scatterData.length*0.8;
+										scope.data1 = scatterData.slice(numToIgnore,totalRemaining+numToIgnore);
+										console.log(numToIgnore);
+										console.log(totalRemaining);
+										console.log(scope.data1);
+				
+										drawScatter("#scatter",scope.data1,60,"numFacility","percentage","ref","postcode","Number of Sports Facility per Suburb","Percentage of Tweets with Sports");
+									});
+								},
+								function(response){
+									console.log(response);
+								}
+							);
+							
+						$resource("https://couchv.team8.xyz/melb_tweets/_design/designDoc/_view/lga?group=true").get()
+							.$promise.then(
+								function(response){
+									$resource("https://static.team8.xyz/json/melb_population.json").get()
+										.$promise.then(
+										function(data){
+											scope.lgaData = [];
+											response.rows.forEach(function(oneRow){
+												populationData = data.rows.find(x => x.key === oneRow.key[0]);
+												var temp = {
+													lgacode: oneRow.key[0],
+													tweetCount: oneRow.value.count,
+													population: populationData.value.population,
+													lganame: populationData.value.lganame,
+													ref: 'lga'
+												};
+												if (temp.lgacode != 24600){
+													scope.lgaData.push(temp);
+												}
+											});
+											var maxPop = Math.max.apply(Math,scope.lgaData.map(function(data){return data.population;}));
+											drawScatter("#lga",scope.lgaData,maxPop,"population","tweetCount","ref","lganame","population","total tweets count");
+										},
+										function(data){
+											console.log(data);
+										}
+									);
+								},
+								function(response){
+									console.log(response);
+								}
+							);
+						
+						//attr1: numFacility, attr2: percentage, attr3: ref, attr4: postcode
+						function drawScatter(div, data, xmax, attr1, attr2, attr3, attr4, xmsg, ymsg){
+							var x = d3.scale.linear()
+								.range([0, width]);
+
+							var y = d3.scale.linear()
+								.range([height, 0]);
+
+							var color = d3.scale.category10();
+
+							var xAxis = d3.svg.axis()
+								.scale(x)
+								.orient("bottom");
+
+							var yAxis = d3.svg.axis()
+								.scale(y)
+								.orient("left");
+				
+							var svg = d3.select(div).append("svg")
+								.attr("width", width + margin.left + margin.right)
+								.attr("height", height + margin.top + margin.bottom)
+								.append("g")
+								.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+							
+							x.domain([0,xmax]).nice();
+							y.domain(d3.extent(data, function(d) { return d[attr2] })).nice();
+
+							svg.append("g")
+								.attr("class", "x axis")
+								.attr("transform", "translate(0," + height + ")")
+								.call(xAxis)
+								.append("text")
+								.attr("class", "label")
+								.attr("x", width)
+								.attr("y", -6)
+								.style("text-anchor", "end")
+								.text(xmsg);
+
+							svg.append("g")
+								.attr("class", "y axis")
+								.call(yAxis)
+								.append("text")
+								.attr("class", "label")
+								.attr("transform", "rotate(-90)")
+								.attr("y", 6)
+								.attr("dy", ".71em")
+								.style("text-anchor", "end")
+								.text(ymsg);
+
+							var div = d3.select("body").append("div")	
+								.attr("class", "tooltip")				
+								.style("opacity", 0);
+								
+							svg.selectAll(".dot")
+								.data(data)
+								.enter().append("circle")
+								.attr("class", "dot")
+								.attr("r", 3.5)
+								.attr("cx", function(d) { return x(d[attr1]); })
+								.attr("cy", function(d) { return y(d[attr2]); })
+								.style("fill", function(d) { return color(d[attr3]); })
+								.on('mouseover', function(d) {		
+									div .transition()		
+										.duration(200)		
+										.style("opacity", .9);				
+									div	.html("Area id: "+d[attr4])	
+										.style("width", 150+"px")
+										.style("height",30+"px")
+										.style("left", (d3.event.pageX) + "px")		
+										.style("top", (d3.event.pageY - 28) + "px");
+									})
+								.on("mouseout", function(d) {		
+									div.transition()		
+										.duration(500)		
+										.style("opacity", 0);	
+								});
+								
+							var legend = svg.selectAll(".legend")
+								.data(color.domain())
+								.enter().append("g")
+								.attr("class", "legend")
+								.attr("transform", function(d, i) { return "translate(0," + i * 20 + ")"; });
+
+							legend.append("rect")
+								.attr("x", width - 18)
+								.attr("width", 18)
+								.attr("height", 18)
+								.style("fill", color);
+
+							legend.append("text")
+								.attr("x", width - 24)
+								.attr("y", 9)
+								.attr("dy", ".35em")
+								.style("text-anchor", "end")
+								.text(function(d) { return d; });
+						}
+					}
+				}
+		}]);
+
+</script>
+</body>
+</html>
